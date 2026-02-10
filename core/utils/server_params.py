@@ -50,7 +50,7 @@ def generate_bip39_name() -> str:
 
 
 async def get_or_create_device_info(
-        json_path: str = "device_info.json"
+        json_path: str = "/app/data/device_info.json"
 ) -> str:
     """
     Асинхронно получает информацию об устройстве из JSON файла,
