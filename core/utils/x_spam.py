@@ -39,7 +39,6 @@ async def init_session_pool(pool_size: int = 10):
                 max_clients=500,  # Максимум соединений для connection pooling
             )
             _global_sessions.append(session)
-
         print(f"✓ Пул сессий создан: {len(_global_sessions)} сессий")
         print(f"✓ DNS cache активирован (60 секунд, общий для всех сессий)")
 
@@ -63,12 +62,13 @@ async def cleanup_session_pool():
             except:
                 pass
         _global_sessions.clear()
-        print("✓ Пул сессий закрыт")
+    print("✓ Пул сессий закрыт")
 
 
 @dataclass
 class TokenSession:
     """Сессия токена с его cookies и fingerprint."""
+
     token: str
     cookies: dict
     account_name: str
@@ -99,7 +99,6 @@ class ProxyRotator:
             if proxy not in self.failed_proxies:
                 return proxy
             attempts += 1
-
         return None
 
     def mark_failed(self, proxy: str):
@@ -218,7 +217,6 @@ def get_random_features() -> dict:
         # Enhanced cards - UI фича
         "responsive_web_enhance_cards_enabled": random.choice([False, True]),
     }
-
     return {**base_features, **variable_features}
 
 
@@ -316,7 +314,6 @@ def load_sessions_from_cache(
             cache_data = json.load(f)
 
         cache_dict = {item["token"]: item for item in cache_data}
-
         cached_sessions = []
         missing_tokens = []
 
@@ -385,8 +382,8 @@ async def post_reply_api(
     """
     try:
         url = "https://x.com/i/api/graphql/F3SgNCEemikyFA5xnQOmTw/CreateTweet"
-
         csrf_token = token_session.cookies.get("ct0")
+
         if not csrf_token:
             print(f"[{task_id}] ✗ Нет CSRF токена для {token_session.account_name}")
             return False
@@ -424,6 +421,7 @@ async def post_reply_api(
             "x-twitter-auth-type": "OAuth2Session",
             "x-twitter-client-language": twitter_client_language,
         }
+
         # НЕ добавляем user-agent, sec-ch-ua* - curl_cffi сам добавит для chrome142!
 
         # Рандомизация темы (dark mode)
@@ -500,43 +498,19 @@ async def post_reply_api(
         # Веса соответствуют реальной статистике использования
         weights = [
             # Chrome Desktop (15 версий) - 65% / 15 = ~4.33% каждая
-            0.045,
-            0.045,
-            0.045,
-            0.045,
-            0.045,  # Новые версии популярнее
-            0.043,
-            0.043,
-            0.043,
-            0.043,
-            0.043,
-            0.042,
-            0.042,
-            0.042,
-            0.042,
-            0.042,
+            0.045, 0.045, 0.045, 0.045, 0.045,  # Новые версии популярнее
+            0.043, 0.043, 0.043, 0.043, 0.043,
+            0.042, 0.042, 0.042, 0.042, 0.042,
             # Chrome Android (2 версии) - 15% / 2 = 7.5% каждая
-            0.08,
-            0.07,
+            0.08, 0.07,
             # Safari Desktop (6 версий) - 6% / 6 = 1% каждая
-            0.012,
-            0.011,
-            0.010,
-            0.010,
-            0.009,
-            0.008,
+            0.012, 0.011, 0.010, 0.010, 0.009, 0.008,
             # Safari iOS (4 версии) - 8% / 4 = 2% каждая
-            0.022,
-            0.020,
-            0.020,
-            0.018,
+            0.022, 0.020, 0.020, 0.018,
             # Edge (2 версии) - 3% / 2 = 1.5% каждая
-            0.016,
-            0.014,
+            0.016, 0.014,
             # Firefox (3 версии) - 2.5% / 3 = ~0.83% каждая
-            0.009,
-            0.008,
-            0.008,
+            0.009, 0.008, 0.008,
             # Tor (1 версия) - 0.5%
             0.005,
         ]
@@ -566,7 +540,6 @@ async def post_reply_api(
                 .get("result", {})
                 .get("rest_id")
             )
-
             token_session.request_count += 1
             proxy_short = proxy.split("@")[-1][:25] if proxy else "direct"
             text_short = reply_text[:35]
@@ -630,7 +603,6 @@ async def post_reply_api(
                 and ("proxy" in error_str.lower() or "connection" in error_str.lower())
         ):
             proxy_rotator.mark_failed(proxy)
-
         print(f"[{task_id}] ✗ {error_str[:100]}")
         return False
 
@@ -646,7 +618,7 @@ async def parallel_mass_posting(
         max_delay: float = 0.3,
         session_pool_size: int = 10,
         slow_mode: bool = False,
-        task_id: Optional[str] = None,  # ← НОВОЕ: task_id для отслеживания
+        task_id: Optional[str] = None,
 ) -> bool:
     """
     Параллельная массовая рассылка с concurrency.
@@ -669,7 +641,7 @@ async def parallel_mass_posting(
     """
     # ← НОВОЕ: Импорт функций хранилища
     if task_id:
-        from core.utils.task_storage import update_task_progress
+        from core.utils.task_storage import update_task_progress, get_task_result
 
     start_time = time.time()
     actual_concurrency = min(concurrency, count)
@@ -681,8 +653,14 @@ async def parallel_mass_posting(
     async def send_one_comment(index: int) -> bool:
         """Отправляет один комментарий с учетом concurrency."""
         nonlocal session_index
-
         async with semaphore:
+            # ✨ НОВОЕ: Проверка флага остановки
+            if task_id:
+                task = await get_task_result(task_id)
+                if task and task.get("stopped", False):
+                    print(f"🛑 Batch interrupted by stop flag at #{index + 1}")
+                    return False
+
             # Round-robin выбор сессии
             async with session_lock:
                 token_session = sessions[session_index % len(sessions)]
@@ -736,17 +714,14 @@ async def parallel_mass_posting(
     print(f"💬 Комментариев: {count}")
     print(f"🔀 Concurrency: {actual_concurrency}")
     print(f"🌐 HTTP сессий: {session_pool_size}")
-    print(f"⏱️  Задержка: {min_delay}-{max_delay} сек")
+    print(f"⏱️ Задержка: {min_delay}-{max_delay} сек")
     print(f"🎯 Стратегия: Round-robin")
-
     if proxy_rotator:
         print(f"🔐 Прокси: {len(proxy_rotator.proxies)}")
     else:
         print(f"🔐 Прокси: ❌ Не используются")
-
     if task_id:
         print(f"🆔 Task ID: {task_id}")
-
     print(f"✨ DNS cache: Активен (60 секунд)")
     print(f"{'=' * 60}")
     print(f"🔥 Запускаем TLS fingerprinting (curl_cffi)...")
@@ -759,7 +734,6 @@ async def parallel_mass_posting(
 
     # Запуск всех задач
     tasks = [send_one_comment(i) for i in range(count)]
-
     print(f"⏳ Отправка {count} комментариев (concurrency={actual_concurrency})...\n")
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -775,32 +749,33 @@ async def parallel_mass_posting(
     print(f"\n{'=' * 60}")
     print(f"📊 ИТОГОВАЯ СТАТИСТИКА")
     print(f"{'=' * 60}")
-    print(f" ✓ Успешно: {successful}/{count}")
-    print(f" ✗ Ошибок: {failed}/{count}")
-    print(f" 📈 Success rate: {(successful / count * 100):.1f}%")
-    print(f" ⏱️  Время: {format_time(elapsed)}")
+    print(f"  ✓ Успешно: {successful}/{count}")
+    print(f"  ✗ Ошибок: {failed}/{count}")
+    print(f"  📈 Success rate: {(successful / count * 100):.1f}%")
+    print(f"  ⏱️ Время: {format_time(elapsed)}")
 
     # Скорость обработки
     if elapsed > 0:
         rate = successful / elapsed
-        print(f" 🚀 Скорость: {rate:.1f} req/sec")
+        print(f"  🚀 Скорость: {rate:.1f} req/sec")
 
     print(f"\n{'─' * 60}")
     print(f"📈 Распределение по токенам:")
     for session in sorted(sessions, key=lambda s: s.request_count, reverse=True):
         if session.request_count > 0:
-            print(f"   {session.account_name}: {session.request_count} запросов")
+            print(f"  {session.account_name}: {session.request_count} запросов")
 
     if proxy_rotator:
         print(f"\n{'─' * 60}")
         print(f"🌐 Статистика прокси:")
         print(
-            f"   ⚠️  Мертвых: {len(proxy_rotator.failed_proxies)}/{len(proxy_rotator.proxies)}"
+            f"  ⚠️ Мертвых: {len(proxy_rotator.failed_proxies)}/{len(proxy_rotator.proxies)}"
         )
         working = len(proxy_rotator.proxies) - len(proxy_rotator.failed_proxies)
-        print(f"   ✓ Рабочих: {working}/{len(proxy_rotator.proxies)}")
+        print(f"  ✓ Рабочих: {working}/{len(proxy_rotator.proxies)}")
 
     print(f"{'=' * 60}")
+
     return successful > 0
 
 
@@ -882,7 +857,7 @@ async def start_mass_reply(
         max_delay: float = 0.3,
         session_pool_size: int = 10,
         slow_mode: bool = False,
-        task_id: Optional[str] = None,  # ← НОВОЕ: task_id для отслеживания
+        task_id: Optional[str] = None,
 ) -> bool:
     """
     🔥 API: Универсальный интерфейс для запуска массовой рассылки комментариев.
@@ -927,7 +902,6 @@ async def start_mass_reply(
 
     # 3. Готовим sessions
     final_sessions: list[TokenSession] = []
-
     for idx, item in enumerate(cookies_list):
         # ✨ ИСПРАВЛЕНИЕ: Распознаём формат
         if "cookies" in item and "token" in item:
@@ -945,11 +919,10 @@ async def start_mass_reply(
 
         # ✨ ПРОВЕРКА: Наличие обязательных cookies
         if "ct0" not in cookies_dict:
-            print(f"⚠️  Пропущен {account_name}: отсутствует ct0 (CSRF токен)")
+            print(f"⚠️ Пропущен {account_name}: отсутствует ct0 (CSRF токен)")
             continue
-
         if "auth_token" not in cookies_dict:
-            print(f"⚠️  Пропущен {account_name}: отсутствует auth_token")
+            print(f"⚠️ Пропущен {account_name}: отсутствует auth_token")
             continue
 
         final_sessions.append(
@@ -983,5 +956,5 @@ async def start_mass_reply(
         max_delay=max_delay,
         session_pool_size=session_pool_size,
         slow_mode=slow_mode,
-        task_id=task_id,  # ← НОВОЕ: передаём task_id в parallel_mass_posting
+        task_id=task_id,
     )
