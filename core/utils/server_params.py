@@ -6,6 +6,8 @@ import random
 from pathlib import Path
 from typing import Dict, Any
 
+import httpx
+
 # BIP39 словарь (английские слова, первые 100 для примера)
 BIP39_WORDS = [
     "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract",
@@ -24,22 +26,28 @@ BIP39_WORDS = [
 ]
 
 
-async def get_local_ip() -> str:
-    """Асинхронно получает локальный IP адрес устройства"""
-    loop = asyncio.get_event_loop()
+async def get_public_ip() -> str:
+    """Асинхронно получает публичный IP адрес устройства"""
+    # Список сервисов для определения IP (fallback если один не работает)
+    services = [
+        "https://api.ipify.org",
+        "https://ifconfig.me/ip",
+        "https://icanhazip.com",
+        "https://ipinfo.io/ip"
+    ]
 
-    def _get_ip():
-        try:
-            # Создаем UDP соединение для определения IP
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            return "127.0.0.1"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for service in services:
+            try:
+                response = await client.get(service)
+                if response.status_code == 200:
+                    ip = response.text.strip()
+                    return ip
+            except Exception:
+                continue
 
-    return await loop.run_in_executor(None, _get_ip)
+    # Если все сервисы недоступны
+    return "0.0.0.0"
 
 
 def generate_bip39_name() -> str:
@@ -60,7 +68,7 @@ async def get_or_create_device_info(
         json_path: Путь к JSON файлу
 
     Returns:
-        Base64 строка с информацией об устройстве
+        Словарь с ключами 'ip' и 'name'
     """
     file_path = Path(json_path)
 
@@ -73,11 +81,11 @@ async def get_or_create_device_info(
                 return json.load(f)
 
         data = await loop.run_in_executor(None, _read_json)
-
-        return dict_to_base64(data)
+        print(f"Загружено из {json_path}: {data}")
+        return data
 
     # Если файла нет - создаем новую запись
-    ip_address = await get_local_ip()
+    ip_address = await get_public_ip()
     device_name = generate_bip39_name()
 
     device_info = {
@@ -94,8 +102,10 @@ async def get_or_create_device_info(
             json.dump(device_info, f, ensure_ascii=False, indent=2)
 
     await loop.run_in_executor(None, _write_json)
+    print(f"Создан новый файл {json_path}: {device_info}")
 
-    result =  dict_to_base64(device_info)
+    result = dict_to_base64(device_info)
+
     return result
 
 
