@@ -649,7 +649,6 @@ async def parallel_mass_posting(
 
     async def send_one_comment(index: int) -> bool:
         """Отправляет один комментарий с учетом concurrency."""
-        nonlocal session_index
         async with semaphore:
             # ✨ НОВОЕ: Проверка флага остановки
             if task_id:
