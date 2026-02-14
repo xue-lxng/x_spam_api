@@ -30,7 +30,7 @@ async def start_spamming(data: SpamRequestModel):
                 cookies_list=data.cookies_list,
                 proxies=data.proxies,
                 proxies_string=data.proxies_string,
-                count=batch_size,  # ← Большой count → полная параллельность
+                count=1000 if not data.slow_mode else 100,  # ← Большой count → полная параллельность
                 concurrency=data.concurrency,
                 min_delay=data.min_delay,
                 max_delay=data.max_delay,

@@ -651,6 +651,10 @@ async def parallel_mass_posting(
         """Отправляет один комментарий с учетом concurrency."""
         async with semaphore:
             # ✨ НОВОЕ: Проверка флага остановки
+            task = await get_task_result(task_id)
+            if task and task.get("stopped", False):
+                print(f"🛑 Batch interrupted by stop flag at #{index + 1}")
+                return False
             if task_id:
                 task = await get_task_result(task_id)
                 if task and task.get("stopped", False):
