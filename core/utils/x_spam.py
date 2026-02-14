@@ -943,7 +943,7 @@ async def start_mass_reply(
         sessions=final_sessions,
         tweet_id=tweet_id,
         comments=comments,
-        count=100,
+        count=1000 if not slow_mode else 100,
         proxy_rotator=proxy_rotator,
         concurrency=concurrency,
         min_delay=min_delay if not slow_mode else 1,
