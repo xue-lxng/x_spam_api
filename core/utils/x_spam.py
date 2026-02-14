@@ -646,9 +646,6 @@ async def parallel_mass_posting(
     start_time = time.time()
     actual_concurrency = min(concurrency, count)
 
-    # Round-robin индекс для справедливого распределения нагрузки
-    session_index = 0
-    session_lock = asyncio.Lock()
 
     async def send_one_comment(index: int) -> bool:
         """Отправляет один комментарий с учетом concurrency."""
@@ -661,10 +658,7 @@ async def parallel_mass_posting(
                     print(f"🛑 Batch interrupted by stop flag at #{index + 1}")
                     return False
 
-            # Round-robin выбор сессии
-            async with session_lock:
-                token_session = sessions[session_index % len(sessions)]
-                session_index += 1
+            token_session = random.choice(sessions)
 
             comment = random.choice(comments)
             proxy = proxy_rotator.get_next() if proxy_rotator else None
@@ -949,7 +943,7 @@ async def start_mass_reply(
         sessions=final_sessions,
         tweet_id=tweet_id,
         comments=comments,
-        count=count,
+        count=100,
         proxy_rotator=proxy_rotator,
         concurrency=concurrency,
         min_delay=min_delay,
