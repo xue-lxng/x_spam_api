@@ -2,7 +2,9 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from api.v1.request_models.spam import SpamRequestModel
 from api.v1.services.spaming import start_spamming
-from core.utils.task_storage import get_task_result, delete_task, stop_task
+from core.utils.task_storage import (
+    get_task_result, delete_task, stop_task, register_running_task
+)
 
 router = APIRouter(tags=["Spam"])
 
@@ -10,7 +12,10 @@ router = APIRouter(tags=["Spam"])
 @router.post("/spam")
 async def spam(data: SpamRequestModel):
     """Запускает бесконечную рассылку с полным concurrency"""
-    asyncio.create_task(start_spamming(data))
+    # Сохраняем handle задачи для возможности мгновенной отмены
+    task = asyncio.create_task(start_spamming(data))
+    await register_running_task(data.task_id, task)
+
     return {
         "message": "Infinite spam started with full concurrency",
         "task_id": data.task_id,
@@ -30,7 +35,7 @@ async def get_spam_status(task_id: str):
 
 @router.patch("/spam/{task_id}/stop")
 async def stop_spam_task(task_id: str):
-    """Останавливает задачу (установка флага stopped)"""
+    """Мгновенно останавливает задачу"""
     task = await get_task_result(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -39,7 +44,7 @@ async def stop_spam_task(task_id: str):
 
     stopped = await stop_task(task_id)
     if stopped:
-        return {"message": f"Stop requested for task {task_id}. Finishing current batch..."}
+        return {"message": f"Stop requested for task {task_id}. Execution cancelled immediately."}
     raise HTTPException(status_code=500, detail="Failed to stop task")
 
 

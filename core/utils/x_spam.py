@@ -729,14 +729,19 @@ async def parallel_mass_posting(
     semaphore = asyncio.Semaphore(actual_concurrency)
     await init_session_pool(session_pool_size)
 
-    # Запуск всех задач
-    tasks = [send_one_comment(i) for i in range(count)]
-    print(f"⏳ Отправка {count} комментариев (concurrency={actual_concurrency})...\n")
+    try:
+        # Запуск всех задач
+        tasks = [send_one_comment(i) for i in range(count)]
+        print(f"⏳ Отправка {count} комментариев (concurrency={actual_concurrency})...\n")
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Закрытие пула сессий
-    await cleanup_session_pool()
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        # ✨ Гарантированное закрытие пула сессий, даже если задачу "убили" мгновенно
+        try:
+            await cleanup_session_pool()
+        except asyncio.CancelledError:
+            # Если CancelledError прилетел прямо во время закрытия сессий — добиваем в фоне
+            asyncio.create_task(cleanup_session_pool())
 
     # Статистика
     elapsed = time.time() - start_time

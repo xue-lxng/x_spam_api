@@ -12,16 +12,15 @@ async def start_spamming(data: SpamRequestModel):
     batch_count = 0
     try:
         while True:
-            # Проверяем флаг остановки
+            # Проверяем флаг остановки (на случай штатного завершения)
             task = await get_task_result(data.task_id)
             if task and task.get("stopped", False):
-                print(f"🛑 Task {data.task_id} stopped by user")
+                print(f"🛑 Task {data.task_id} stopped by user (flag)")
                 success = True
                 break
 
             batch_count += 1
-            # ✨ КЛЮЧ: Большой batch_size для полной параллельности!
-            batch_size = data.concurrency * 5  # Например: 200 * 5 = 1000
+            batch_size = data.concurrency * 5
 
             print(f"🚀 Task {data.task_id}: Batch #{batch_count}, size={batch_size}, concurrency={data.concurrency}")
 
@@ -30,7 +29,7 @@ async def start_spamming(data: SpamRequestModel):
                 cookies_list=data.cookies_list,
                 proxies=data.proxies,
                 proxies_string=data.proxies_string,
-                count=1000 if not data.slow_mode else 100,  # ← Большой count → полная параллельность
+                count=1000 if not data.slow_mode else 100,
                 concurrency=data.concurrency,
                 min_delay=data.min_delay,
                 max_delay=data.max_delay,
@@ -44,8 +43,10 @@ async def start_spamming(data: SpamRequestModel):
 
         await finish_task(data.task_id, success)
     except asyncio.CancelledError:
-        print(f"🛑 Task {data.task_id} cancelled")
-        await finish_task(data.task_id, False)
+        print(f"🛑 Task {data.task_id} instantly cancelled via API")
+        await finish_task(data.task_id, True) # Помечаем как корректно остановленную
+        raise # Пробрасываем выше, чтобы asyncio корректно закрыл корутину
     except Exception as e:
         print(f"❌ Error in task {data.task_id}: {e}")
         await finish_task(data.task_id, False)
+
