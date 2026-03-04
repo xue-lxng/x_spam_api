@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
 def register_app() -> FastAPI:
     app = FastAPI(
         lifespan=lifespan,
-        title="Bet API",
+        title="X API",
         version="0.0.1",
         description="API for betting service",
         docs_url="/api/docs",

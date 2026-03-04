@@ -3,7 +3,12 @@ from fastapi import APIRouter, HTTPException
 from api.v1.request_models.spam import SpamRequestModel
 from api.v1.services.spaming import start_spamming
 from core.utils.task_storage import (
-    get_task_result, delete_task, stop_task, register_running_task
+    get_task_result,
+    delete_task,
+    stop_task,
+    register_running_task,
+    init_task,               # FIX: импортируем
+    register_stop_event,     # FIX: импортируем
 )
 
 router = APIRouter(tags=["Spam"])
@@ -12,15 +17,25 @@ router = APIRouter(tags=["Spam"])
 @router.post("/spam")
 async def spam(data: SpamRequestModel):
     """Запускает бесконечную рассылку с полным concurrency"""
-    # Сохраняем handle задачи для возможности мгновенной отмены
-    task = asyncio.create_task(start_spamming(data))
+
+    # FIX 1: init_task ПЕРЕД create_task — исключаем race condition.
+    # Если /stop придёт сразу после ответа, task_id уже есть в TASK_RESULTS.
+    await init_task(data.task_id, 0)
+
+    # FIX 2: Создаём Event и регистрируем его ДО запуска задачи.
+    # stop_task() вызовет event.set() — send_one_comment увидит это синхронно.
+    stop_event = asyncio.Event()
+    await register_stop_event(data.task_id, stop_event)
+
+    # FIX 3: Теперь создаём задачу и сразу регистрируем её handle.
+    task = asyncio.create_task(start_spamming(data, stop_event))
     await register_running_task(data.task_id, task)
 
     return {
         "message": "Infinite spam started with full concurrency",
         "task_id": data.task_id,
         "status_url": f"/api/v1/spam/status/{data.task_id}",
-        "stop_url": f"/api/v1/spam/{data.task_id}/stop"
+        "stop_url": f"/api/v1/spam/{data.task_id}/stop",
     }
 
 
